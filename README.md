@@ -100,8 +100,3 @@ npm run dev
 
 This project is licensed under the MIT License.
 
----
-
-👉 That’s the **complete README**.
-
-Do you want me to also **add sample mock data** (for `server.js` backend) inside README so evaluators can run without errors, or just keep it clean like this?
