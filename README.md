@@ -27,7 +27,8 @@ project-root/
 │   ├── src/
 │   │   ├── App.jsx        # Main app component
 │   │   ├── App.css        # Global styles (dark theme)
-│   │   └── ...
+│   │   └── index.jsx
+|   |   
 │   └── package.json
 │
 ├── backend/               # Node.js + GraphQL server
