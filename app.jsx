@@ -1,25 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Container,
-  Avatar,
-  Typography,
-  Paper,
-  CircularProgress,
-  Alert,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  IconButton,
-  TextField,
-  Button,
-  Box
+  Container, Avatar, Typography, Paper, CircularProgress, Alert, Dialog, DialogContent, DialogTitle,
+  IconButton, TextField, Button, Box, Grid,
 } from '@mui/material';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import CloseIcon from '@mui/icons-material/Close';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import Chart from 'react-apexcharts';
-import { ApolloClient, InMemoryCache, HttpLink, gql } from '@apollo/client';
-import { ApolloProvider, useQuery } from '@apollo/client/react';
+import { ApolloClient, InMemoryCache, HttpLink, ApolloProvider, useQuery, useLazyQuery, gql } from '@apollo/client';
 import { Masonry } from '@mui/lab';
 import './App.css';
 
@@ -29,7 +18,22 @@ const client = new ApolloClient({
   cache: new InMemoryCache(),
 });
 
-// GraphQL query
+// Define the dark theme
+const darkTheme = createTheme({
+  palette: {
+    mode: 'dark',
+    background: {
+      default: '#121212',
+      paper: '#1e1e1e',
+    },
+    text: {
+      primary: '#ffffff',
+      secondary: '#b0b0b0',
+    },
+  },
+});
+
+// GraphQL queries
 const GET_INFLUENCER_DATA = gql`
   query {
     getInfluencerData {
@@ -39,16 +43,22 @@ const GET_INFLUENCER_DATA = gql`
       followers
       following
       postCount
-      averageLikes
-      averageComments
-      engagementRate
       posts {
         imageUrl
         caption
         likes
         comments
       }
+      averageLikes
+      averageComments
+      engagementRate
     }
+  }
+`;
+
+const TAG_IMAGE_WITH_GEMINI = gql`
+  query TagImageWithGemini($imageUrl: String!) {
+    tagImageWithGemini(imageUrl: $imageUrl)
   }
 `;
 
@@ -59,43 +69,46 @@ const formatNumber = (num) => {
   return num;
 };
 
-// Fix all image URLs
-const getFullImageUrl = (url) => {
-  if (!url || typeof url !== 'string') return 'https://via.placeholder.com/150';
-  return `http://localhost:4000/proxy-image?url=${encodeURIComponent(url)}`;
-};
-
-// Pie chart data for Interests
-const interestData = [
-  { name: 'Fitness', value: 25 },
-  { name: 'Sanatan', value: 15 },
-  { name: "Men's Psychology", value: 10 },
-  { name: 'Food & Diet', value: 30 },
-  { name: 'Social Awareness', value: 15 },
-];
-
-function AppWrapper() {
-  return (
-    <ApolloProvider client={client}>
-      <App />
-    </ApolloProvider>
-  );
-}
-
 function App() {
   const { loading, error, data } = useQuery(GET_INFLUENCER_DATA);
   const [selectedPost, setSelectedPost] = useState(null);
   const [liked, setLiked] = useState(false);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
+  const [geminiResult, setGeminiResult] = useState('');
+
+  const [tagImage, { loading: geminiLoading, data: geminiData, error: geminiError }] = useLazyQuery(TAG_IMAGE_WITH_GEMINI);
+
+  useEffect(() => {
+    if (geminiData) {
+      setGeminiResult(geminiData.tagImageWithGemini);
+    }
+  }, [geminiData]);
+
+  const handlePostClick = (post) => {
+    setSelectedPost(post);
+    setGeminiResult('');
+    setLiked(false);
+    setComments([]);
+    if (post.imageUrl) {
+      tagImage({ variables: { imageUrl: post.imageUrl } });
+    }
+  };
+
+  const handleLike = () => setLiked(!liked);
+  const handleAddComment = () => {
+    if (newComment.trim() === '') return;
+    setComments([...comments, newComment]);
+    setNewComment('');
+  };
+
+  const placeholderImage = 'https://via.placeholder.com/600x400?text=Image+Not+Found';
 
   if (loading) {
     return (
       <Container className="profile-container">
-        <CircularProgress sx={{ color: '#fff' }} />
-        <Typography variant="h6" sx={{ mt: 2, color: '#fff' }}>
-          Loading influencer data...
-        </Typography>
+        <CircularProgress />
+        <Typography variant="h6" sx={{ mt: 2 }}>Loading influencer data...</Typography>
       </Container>
     );
   }
@@ -117,7 +130,7 @@ function App() {
       <Container className="profile-container">
         <Alert severity="info">
           <Typography variant="h6">No data to display.</Typography>
-          <Typography>Please run the backend scraping script to populate the database.</Typography>
+          <Typography>Please run the backend to seed the database.</Typography>
         </Alert>
       </Container>
     );
@@ -132,8 +145,16 @@ function App() {
     dataLabels: { enabled: false },
     tooltip: { enabled: true },
     grid: { borderColor: '#444' },
+    theme: { mode: 'dark' },
   };
 
+  const interestData = [
+    { name: 'Fitness', value: 25 },
+    { name: 'Sanatan', value: 15 },
+    { name: "Men's Psychology", value: 10 },
+    { name: 'Food & Diet', value: 30 },
+    { name: 'Social Awareness', value: 15 },
+  ];
   const pieOptions = {
     chart: { type: 'donut', toolbar: { show: false }, background: '#1b1b1b' },
     labels: interestData.map((i) => i.name),
@@ -141,69 +162,49 @@ function App() {
     dataLabels: { style: { colors: ['#fff'] } },
     plotOptions: { pie: { donut: { size: '50%' } } },
     title: { text: 'Interests Distribution', align: 'center', style: { color: '#fff' } },
+    theme: { mode: 'dark' },
   };
   const pieSeries = interestData.map((i) => i.value);
 
-  const handleLike = () => setLiked(!liked);
-  const handleAddComment = () => {
-    if (newComment.trim() === '') return;
-    setComments([...comments, newComment]);
-    setNewComment('');
-  };
-
   return (
     <Container className="profile-container">
-      {/* Header */}
       <header>
         <Avatar
           alt={influencer.name}
-          src={getFullImageUrl(influencer.profilePic)}
+          src={influencer.profilePic || placeholderImage}
           sx={{ width: 150, height: 150, margin: '0 auto' }}
         />
-        <h1 className="profile-name">{influencer.name}</h1>
-        <span className="profile-handle">@{influencer.handle}</span>
+        <Typography variant="h4" component="h1" className="profile-name" sx={{ mt: 1 }}>{influencer.name}</Typography>
+        <Typography variant="subtitle1" className="profile-handle">@{influencer.handle}</Typography>
       </header>
 
-      {/* Stats */}
-      <div className="profile-stats">
-        <div>
-          <h4>{formatNumber(influencer.postCount)}</h4>
-          <p>Posts</p>
-        </div>
-        <div>
-          <h4>{formatNumber(influencer.followers)}</h4>
-          <p>Followers</p>
-        </div>
-        <div>
-          <h4>{formatNumber(influencer.following)}</h4>
-          <p>Following</p>
-        </div>
-        <div>
-          <h4>{influencer.averageLikes.toFixed(1)}</h4>
-          <p>Avg Likes</p>
-        </div>
-        <div>
-          <h4>{influencer.averageComments.toFixed(1)}</h4>
-          <p>Avg Comments</p>
-        </div>
-        <div>
-          <h4>{influencer.engagementRate.toFixed(2)}%</h4>
-          <p>Engagement Rate</p>
-        </div>
-      </div>
+      <Grid container spacing={2} className="profile-stats" sx={{mb: 4}}>
+        {[
+          ['Posts', influencer.postCount],
+          ['Followers', influencer.followers],
+          ['Following', influencer.following],
+          ['Avg Likes', influencer.averageLikes.toFixed(1)],
+          ['Avg Comments', influencer.averageComments.toFixed(1)],
+          ['Engagement', influencer.engagementRate.toFixed(2) + '%'],
+        ].map(([label, value], i) => (
+          <Grid item xs={6} sm={4} md={2} key={i}>
+            <Paper elevation={3} className="stat-box">
+              <Typography variant="h6">{formatNumber(value)}</Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>{label}</Typography>
+            </Paper>
+          </Grid>
+        ))}
+      </Grid>
 
-      {/* Line Chart */}
       <div className="chart-container">
         <Chart options={chartOptions} series={chartSeries} type="line" height={400} />
       </div>
 
-      {/* Pie Chart */}
       <Paper className="chart-card">
         <Chart options={pieOptions} series={pieSeries} type="donut" height={350} />
       </Paper>
 
-      {/* Posts */}
-      <Typography variant="h5" sx={{ mt: 4, mb: 2, textAlign: 'center', color: '#fff' }}>
+      <Typography variant="h5" sx={{ mt: 4, mb: 2, textAlign: 'center' }}>
         Recent Posts
       </Typography>
 
@@ -212,86 +213,64 @@ function App() {
           <Paper
             className="post-card"
             key={index}
-            onClick={() => {
-              setSelectedPost(post);
-              setLiked(false);
-              setComments([]);
-            }}
+            onClick={() => handlePostClick(post)}
           >
-            <img src={getFullImageUrl(post.imageUrl)} alt="post" className="post-image" />
-            <Typography variant="body1" className="post-caption">
-              {post.caption}
-            </Typography>
-            <Typography variant="caption" color="textSecondary">
-              Likes: {post.likes} | Comments: {post.comments}
-            </Typography>
+            <img
+              src={post.imageUrl || placeholderImage}
+              alt="post"
+              className="post-image"
+            />
+            <Typography variant="body1" className="post-caption">{post.caption}</Typography>
+            <Typography variant="caption" color="text.secondary">Likes: {post.likes}</Typography>
           </Paper>
         ))}
       </Masonry>
-
-      {/* Post Modal */}
+      
       <Dialog open={!!selectedPost} onClose={() => setSelectedPost(null)} maxWidth="sm" fullWidth>
         <DialogTitle>
           Post Details
-          <IconButton
-            aria-label="close"
-            onClick={() => setSelectedPost(null)}
-            sx={{ position: 'absolute', right: 8, top: 8 }}
-          >
-            <CloseIcon />
-          </IconButton>
+          <IconButton onClick={() => setSelectedPost(null)} sx={{ position: 'absolute', right: 8, top: 8 }}><CloseIcon /></IconButton>
         </DialogTitle>
         {selectedPost && (
           <DialogContent>
             <img
-              src={getFullImageUrl(selectedPost.imageUrl)}
+              src={selectedPost.imageUrl || placeholderImage}
               alt="post"
               style={{ width: '100%', borderRadius: '8px', marginBottom: '10px' }}
             />
-            <Box display="flex" alignItems="center" mb={1}>
-              <IconButton onClick={handleLike} color={liked ? 'error' : 'default'}>
-                {liked ? <FavoriteIcon /> : <FavoriteBorderIcon />}
-              </IconButton>
-              <Typography variant="body2">{selectedPost.likes + (liked ? 1 : 0)} likes</Typography>
-            </Box>
-            <Typography variant="body1" style={{ marginBottom: '10px' }}>
-              {selectedPost.caption}
-            </Typography>
-
-            {/* Comments */}
             <Box mb={2}>
-              <Typography variant="subtitle2">Comments:</Typography>
-              {comments.length === 0 ? (
-                <Typography variant="caption" color="textSecondary">
-                  No comments yet.
-                </Typography>
-              ) : (
-                comments.map((c, i) => (
-                  <Typography key={i} variant="body2">
-                    - {c}
-                  </Typography>
-                ))
-              )}
+              <Typography variant="subtitle2">Likes:</Typography>
+              <Box display="flex" alignItems="center" mb={1}>
+                <IconButton onClick={handleLike} color={liked ? 'error' : 'default'}>{liked ? <FavoriteIcon /> : <FavoriteBorderIcon />}</IconButton>
+                <Typography variant="body2">{selectedPost.likes + (liked ? 1 : 0)} likes</Typography>
+              </Box>
+              <Typography variant="body1" style={{ marginBottom: '10px' }}>{selectedPost.caption}</Typography>
             </Box>
-
-            <Box display="flex" gap={1}>
-              <TextField
-                fullWidth
-                size="small"
-                variant="outlined"
-                placeholder="Add a comment..."
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddComment()}
-              />
-              <Button variant="contained" onClick={handleAddComment}>
-                Post
-              </Button>
+            
+            <Box mb={2}>
+              <Typography variant="subtitle2">Gemini Analysis:</Typography>
+              {geminiLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}><CircularProgress size={20} /></Box>
+              ) : geminiError ? (
+                <Alert severity="error"><Typography>An error occurred: {geminiError.message}</Typography></Alert>
+              ) : (
+                <Typography variant="body2">{geminiResult || 'Click a post to analyze.'}</Typography>
+              )}
             </Box>
           </DialogContent>
         )}
       </Dialog>
     </Container>
+  );
+}
+
+function AppWrapper() {
+  return (
+    <ThemeProvider theme={darkTheme}>
+      <ApolloProvider client={client}>
+        <App />
+      </ApolloProvider>
+    </ThemeProvider>
   );
 }
 
